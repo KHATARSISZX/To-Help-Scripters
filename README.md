@@ -3,6 +3,7 @@
 some scripts made by me or by other scripter.
 
 **SL VFX Explorer (TSB):**
+
 It facilitates the way to obtain VFX from TSB (The Strongest Battlegrounds) and also automatically creates a functional script to run the files (Folders, VFX, Flipbooks, etc.).
 _V1 & V2_
 
