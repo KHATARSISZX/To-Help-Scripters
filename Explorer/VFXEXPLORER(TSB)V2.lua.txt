@@ -1,0 +1,286 @@
+local sgui = game:GetService("CoreGui")
+local rs = game:GetService("ReplicatedStorage")
+local uis = game:GetService("UserInputService")
+local lp = game:GetService("Players").LocalPlayer
+
+if sgui:FindFirstChild("SL_VFX_EXPLORER") then sgui.SL_VFX_EXPLORER:Destroy() end
+
+local main_gui = Instance.new("ScreenGui", sgui)
+main_gui.Name = "SL_VFX_EXPLORER"
+main_gui.ResetOnSpawn = false
+
+local theme = {
+    accent = Color3.fromRGB(138, 43, 226),
+    bg = Color3.fromRGB(15, 15, 15),
+    dark = Color3.fromRGB(25, 25, 25),
+    text = Color3.fromRGB(220, 220, 220),
+    search = Color3.fromRGB(20, 20, 20)
+}
+
+local function create(class, props, parent)
+    local obj = Instance.new(class)
+    for i, v in pairs(props) do obj[i] = v end
+    obj.Parent = parent
+    return obj
+end
+
+local function drag(obj)
+    local dragging, input, startPos, startInput
+    obj.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            startInput = i.Position
+            startPos = obj.Position
+        end
+    end)
+    uis.InputChanged:Connect(function(i)
+        if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then
+            local delta = i.Position - startInput
+            obj.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+    uis.InputEnded:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = false
+        end
+    end)
+end
+
+local function get_safe_path(obj)
+    local path = "game"
+    local parts = obj:GetFullName():split(".")
+    for i, name in ipairs(parts) do
+        if name:match("^%d") or name:find(" ") or name:find("[^%w_]") then
+            path = path .. '["' .. name .. '"]'
+        else
+            path = path .. "." .. name
+        end
+    end
+    return path
+end
+
+local toggle = create("TextButton", {
+    Size = UDim2.new(0, 40, 0, 40),
+    Position = UDim2.new(0, 15, 0, 15),
+    BackgroundColor3 = theme.bg,
+    Text = "SL",
+    TextColor3 = theme.accent,
+    Font = "GothamBold",
+    TextSize = 13
+}, main_gui)
+create("UICorner", {CornerRadius = UDim.new(1, 0)}, toggle)
+create("UIStroke", {Color = theme.accent, Thickness = 2}, toggle)
+drag(toggle)
+
+local main = create("Frame", {
+    Size = UDim2.new(0, 440, 0, 320),
+    Position = UDim2.new(0.5, -220, 0.5, -160),
+    BackgroundColor3 = theme.bg,
+    Visible = false
+}, main_gui)
+create("UICorner", {CornerRadius = UDim.new(0, 6)}, main)
+create("UIStroke", {Color = theme.accent, Thickness = 1.2}, main)
+drag(main)
+
+toggle.MouseButton1Click:Connect(function() main.Visible = not main.Visible end)
+
+local top = create("Frame", {
+    Size = UDim2.new(1, 0, 0, 30),
+    BackgroundColor3 = theme.dark
+}, main)
+create("UICorner", {CornerRadius = UDim.new(0, 6)}, top)
+
+local title = create("TextLabel", {
+    Size = UDim2.new(0.5, 0, 1, 0),
+    Position = UDim2.new(0, 10, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "SL(vfx) Explorer",
+    TextColor3 = Color3.new(1, 1, 1),
+    Font = "GothamBold",
+    TextSize = 13,
+    TextXAlignment = "Left"
+}, top)
+
+local explorer = create("ScrollingFrame", {
+    Size = UDim2.new(0, 290, 1, -85),
+    Position = UDim2.new(0, 10, 0, 38),
+    BackgroundTransparency = 1,
+    ScrollBarThickness = 2,
+    CanvasSize = UDim2.new(0, 0, 0, 0)
+}, main)
+local list = create("UIListLayout", {Padding = UDim.new(0, 3)}, explorer)
+
+local actions = create("Frame", {
+    Size = UDim2.new(0, 120, 1, -85),
+    Position = UDim2.new(1, -130, 0, 38),
+    BackgroundTransparency = 1
+}, main)
+create("UIListLayout", {Padding = UDim.new(0, 5)}, actions)
+
+local sFrame = create("Frame", {
+    Size = UDim2.new(0, 290, 0, 32),
+    Position = UDim2.new(0, 10, 1, -40),
+    BackgroundColor3 = theme.search
+}, main)
+create("UICorner", {CornerRadius = UDim.new(0, 4)}, sFrame)
+
+local sInput = create("TextBox", {
+    Size = UDim2.new(1, -35, 1, 0),
+    Position = UDim2.new(0, 8, 0, 0),
+    BackgroundTransparency = 1,
+    Text = "",
+    PlaceholderText = "Search in folder...",
+    TextColor3 = Color3.new(1, 1, 1),
+    PlaceholderColor3 = Color3.fromRGB(80, 80, 80),
+    Font = "Gotham",
+    TextSize = 11,
+    TextXAlignment = "Left"
+}, sFrame)
+
+local sClear = create("TextButton", {
+    Size = UDim2.new(0, 25, 0, 25),
+    Position = UDim2.new(1, -28, 0.5, -12),
+    BackgroundTransparency = 1,
+    Text = "✕",
+    TextColor3 = Color3.fromRGB(200, 50, 50),
+    Font = "GothamBold",
+    TextSize = 14
+}, sFrame)
+
+local sel = nil
+local path = rs
+local spawned = {}
+
+local function get_ico(obj)
+    local n = obj.Name:lower()
+    if obj:IsA("Folder") or obj:IsA("Configuration") or #obj:GetChildren() > 0 then return "📁" end
+    if obj:IsA("Model") or obj:IsA("MeshPart") or n:match("human") or n:match("mesh") then return "🔧" end
+    if obj:IsA("ParticleEmitter") or obj:IsA("Attachment") then return "✨" end
+    return "📦"
+end
+
+local function run(obj, is_folder)
+    if not obj or not lp.Character then return end
+    local hrp = lp.Character.HumanoidRootPart
+    local base_cf = hrp.CFrame * CFrame.new(0, 0, -8)
+
+    local function setup(o, cf)
+        local cl = o:Clone()
+        if cl:IsA("Model") or cl:IsA("BasePart") then
+            cl.Parent = workspace
+            if cl:IsA("Model") then cl:PivotTo(cf) else cl.CFrame = cf end
+            for _, v in ipairs(cl:GetDescendants()) do
+                if v:IsA("BasePart") then v.Anchored = true end
+                if v:IsA("ParticleEmitter") then v:Emit(50) end
+            end
+            table.insert(spawned, cl)
+        else
+            local at = cl:IsA("Attachment") and cl or Instance.new("Attachment", hrp)
+            if cl:IsA("ParticleEmitter") then cl.Parent = at end
+            at.Parent = hrp; at.Position = (cf.Position - hrp.Position)
+            if cl:IsA("ParticleEmitter") then cl:Emit(50) end
+            table.insert(spawned, at)
+        end
+    end
+
+    if is_folder then
+        local children = obj:GetChildren()
+        for i, child in ipairs(children) do
+            local offset = CFrame.new((i-1) * 5, 0, 0)
+            setup(child, base_cf * offset)
+        end
+    else
+        setup(obj, base_cf)
+    end
+    main:FindFirstChild("DEL", true).Visible = true
+end
+
+local function render(alt)
+    for _, v in ipairs(explorer:GetChildren()) do if v:IsA("TextButton") then v:Destroy() end end
+    local items = alt or path:GetChildren()
+    if path ~= rs and not alt then
+        local b = create("TextButton", {
+            Size = UDim2.new(1, 0, 0, 26),
+            BackgroundColor3 = Color3.fromRGB(40, 20, 20),
+            Text = "  ↩ Back",
+            TextColor3 = Color3.new(1,1,1),
+            Font = "GothamBold",
+            TextXAlignment = "Left"
+        }, explorer)
+        create("UICorner", {}, b)
+        b.MouseButton1Click:Connect(function() sInput.Text = "" path = path.Parent render() end)
+    end
+    for _, i in ipairs(items) do
+        local b = create("TextButton", {
+            Size = UDim2.new(1, 0, 0, 26),
+            BackgroundColor3 = theme.dark,
+            Text = "  " .. get_ico(i) .. " " .. i.Name,
+            TextColor3 = theme.text,
+            Font = "Gotham",
+            TextSize = 10,
+            TextXAlignment = "Left"
+        }, explorer)
+        create("UICorner", {CornerRadius = UDim.new(0, 4)}, b)
+        b.MouseButton1Click:Connect(function()
+            sel = i
+            title.Text = "SEL: " .. i.Name:upper()
+            if b:GetAttribute("C") then 
+                sInput.Text = "" 
+                path = i 
+                render() 
+            else
+                b:SetAttribute("C", true)
+                task.delay(0.35, function() b:SetAttribute("C", nil) end)
+            end
+        end)
+    end
+    explorer.CanvasSize = UDim2.new(0, 0, 0, list.AbsoluteContentSize.Y)
+end
+
+sInput:GetPropertyChangedSignal("Text"):Connect(function()
+    local q = sInput.Text:lower()
+    if q == "" then render() return end
+    local res = {}
+    for _, i in ipairs(path:GetChildren()) do
+        if i.Name:lower():find(q) then table.insert(res, i) end
+    end
+    render(res)
+end)
+
+sClear.MouseButton1Click:Connect(function() sInput.Text = "" render() end)
+
+local function side(n, t, c, f)
+    local b = create("TextButton", {
+        Name = n,
+        Size = UDim2.new(1, 0, 0, 32),
+        BackgroundColor3 = c,
+        Text = t,
+        TextColor3 = Color3.new(1,1,1),
+        Font = "GothamBold",
+        TextSize = 9
+    }, actions)
+    create("UICorner", {}, b)
+    b.MouseButton1Click:Connect(f)
+    return b
+end
+
+side("P", "PLAY ITEM", Color3.fromRGB(40, 120, 40), function() run(sel, false) end)
+side("F", "EXECUTE FOLDER", Color3.fromRGB(150, 90, 20), function() run(sel, true) end)
+side("C", "COPY SCRIPT", theme.accent, function()
+    if not sel or not setclipboard then return end
+    local fullPath = get_safe_path(sel)
+    local code = "local s = " .. fullPath .. "\nlocal h = game.Players.LocalPlayer.Character.HumanoidRootPart\nlocal cf = h.CFrame * CFrame.new(0, 0, -8)\nlocal cl = s:Clone()\nif cl:IsA('Model') or cl:IsA('BasePart') then\n    cl.Parent = workspace\n    if cl:IsA('Model') then cl:PivotTo(cf) else cl.CFrame = cf end\n    for _,v in ipairs(cl:GetDescendants()) do\n        if v:IsA('BasePart') then v.Anchored = true end\n        if v:IsA('ParticleEmitter') then v:Emit(50) end\n    end\nelse\n    local a = cl:IsA('Attachment') and cl or Instance.new('Attachment', h)\n    if cl:IsA('ParticleEmitter') then cl.Parent = a end\n    a.Parent = h\n    a.Position = Vector3.zero\n    if cl:IsA('ParticleEmitter') then cl:Emit(50) end\nend"
+    setclipboard(code)
+    local b = main:FindFirstChild("C", true)
+    b.Text = "COPIED!"
+    task.wait(1) b.Text = "COPY SCRIPT"
+end)
+
+local dBtn = side("DEL", "DELETE ALL", Color3.fromRGB(120, 30, 30), function()
+    for _, i in ipairs(spawned) do if i then i:Destroy() end end
+    spawned = {}
+    main:FindFirstChild("DEL", true).Visible = false
+end)
+dBtn.Visible = false
+
+pcall(render)
